@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './ChatPage.css';
+import webSocket from "../../service/WebSocket.js";
 
 const ChatPage = () => {
     const navigate = useNavigate();
@@ -15,6 +16,7 @@ const ChatPage = () => {
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
+
 
     useEffect(() => {
         scrollToBottom();

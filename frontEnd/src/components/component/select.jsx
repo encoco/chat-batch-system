@@ -1,8 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import './Main.css';
+import './select.css';
 
-const Main = () => {
+const Select = () => {
     const navigate = useNavigate();
 
     const selectRole = (role) => {
@@ -37,4 +37,4 @@ const Main = () => {
     );
 };
 
-export default Main;
+export default Select;
