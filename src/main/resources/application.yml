@@ -12,3 +12,7 @@ spring:
       enabled: false
     jdbc:
       initialize-schema: always
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.app.dto

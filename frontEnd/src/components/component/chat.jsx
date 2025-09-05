@@ -1,82 +1,87 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import './ChatPage.css';
-import webSocket from "../../service/WebSocket.js";
+import '../css/ChatPage.css';
+import webSocketService from "../../service/WebSocket.js";
 
 const ChatPage = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const userRole = searchParams.get('role') || 'customer';
+    const userId = Math.floor(Math.random() * 10000) + 1;
 
+    const [matchStatus, setMatchStatus] = useState('connecting');
+    const [sessionId, setSessionId] = useState(null);
     const [messages, setMessages] = useState([]);
     const [inputMessage, setInputMessage] = useState('');
-    const [connectionStatus, setConnectionStatus] = useState('connecting');
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
+    useEffect(() => {
+        console.log('채팅 페이지 초기화, userId:', userId, 'role:', userRole);
+
+        webSocketService.connect(userId, () => {
+            console.log('연결 완료, 구독 설정 시작');
+
+            // 먼저 구독 설정
+            webSocketService.subscribeToMatchResult(userId, (notification) => {
+                console.log('매칭 성공 알림 수신:', notification);
+                setSessionId(notification.sessionId);
+                setMatchStatus('matched');
+
+                webSocketService.subscribeToChatRoom(notification.sessionId, (message) => {
+                    setMessages(prev => [...prev, {
+                        id: message.chatId || Date.now(),
+                        text: message.message,
+                        sender: message.userId === userId ? 'user' : message.userId === 0 ? 'system' : 'other',
+                        timestamp: new Date(message.date)
+                    }]);
+                });
+            });
+
+            webSocketService.subscribeToWaiting(userId, () => {
+                console.log('대기 상태 알림 수신');
+                setMatchStatus('waiting');
+            });
+
+            // 구독 설정 후 잠시 기다린 다음 매칭 요청
+            setTimeout(() => {
+                console.log('매칭 요청 전송');
+                webSocketService.requestMatch(userId, userRole.toUpperCase());
+            }, 100);
+        });
+    }, []);
 
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
     useEffect(() => {
-        // 초기 메시지 설정
-        if (userRole === 'customer') {
-            setMessages([
-                {
-                    id: 1,
-                    text: "안녕하세요! 고객센터입니다. 무엇을 도와드릴까요?",
-                    sender: 'system',
-                    timestamp: new Date()
-                }
-            ]);
+        webSocketService.connect(userId, () => {
+            webSocketService.requestMatch(userId, userRole.toUpperCase());
 
-            // 연결 상태 시뮬레이션
-            setTimeout(() => {
-                setConnectionStatus('connected');
-            }, 2000);
-        } else {
-            setMessages([
-                {
-                    id: 1,
-                    text: "상담원 모드입니다. 고객의 문의를 기다리고 있습니다.",
-                    sender: 'system',
-                    timestamp: new Date()
-                }
-            ]);
-            setConnectionStatus('waiting');
-        }
-    }, [userRole]);
+            webSocketService.subscribeToMatchResult(userId, (notification) => {
+                setSessionId(notification.sessionId);
+                setMatchStatus('matched');
 
-    const sendMessage = () => {
-        if (inputMessage.trim() === '') return;
+                webSocketService.subscribeToChatRoom(notification.sessionId, (message) => {
+                    setMessages(prev => [...prev, {
+                        id: message.chatId || Date.now(),
+                        text: message.message,
+                        sender: message.userId === userId ? 'user' : message.userId === 0 ? 'system' : 'other',
+                        timestamp: new Date(message.date)
+                    }]);
+                });
+            });
 
-        const newMessage = {
-            id: messages.length + 1,
-            text: inputMessage,
-            sender: 'user',
-            timestamp: new Date()
-        };
+            webSocketService.subscribeToWaiting(userId, () => {
+                setMatchStatus('waiting');
+            });
+        });
+    }, []);
 
-        setMessages(prev => [...prev, newMessage]);
-        setInputMessage('');
-
-        // 간단한 자동 응답 시뮬레이션 (고객일 때만)
-        if (userRole === 'customer') {
-            setTimeout(() => {
-                const autoReply = {
-                    id: messages.length + 2,
-                    text: "네, 확인해보겠습니다. 잠시만 기다려주세요.",
-                    sender: 'agent',
-                    timestamp: new Date()
-                };
-                setMessages(prev => [...prev, autoReply]);
-            }, 1000);
-        }
-    };
 
     const handleKeyPress = (e) => {
         if (e.key === 'Enter') {
@@ -84,53 +89,68 @@ const ChatPage = () => {
         }
     };
 
-    const goBack = () => {
+    const handleLeave = () => {
+        if (sessionId) {
+            webSocketService.leaveChat(sessionId, userId);
+        }
         navigate('/');
     };
 
-    const getStatusText = () => {
-        switch (connectionStatus) {
-            case 'connecting':
-                return userRole === 'customer' ? '상담원 연결 중...' : '시스템 연결 중...';
-            case 'connected':
-                return '상담원 연결됨';
-            case 'waiting':
-                return '고객 대기 중';
-            default:
-                return '';
-        }
+    if (matchStatus === 'waiting') {
+        return (
+            <div className="waiting-container">
+                <h2>{userRole === 'customer' ? '상담원 연결 중...' : '고객 대기 중...'}</h2>
+            </div>
+        );
+    }
+
+    if (matchStatus === 'connecting') {
+        return <div>연결 중...</div>;
+    }
+
+    const sendMessage = () => {
+        if (inputMessage.trim() === '' || !sessionId) return;
+
+        const message = {
+            userId: userId,
+            message: inputMessage,
+            date: new Date().toISOString()
+        };
+
+        console.log('메시지 전송:', message);
+        webSocketService.sendChatMessage(sessionId, message);
+        setInputMessage('');
     };
 
-    const getStatusClass = () => {
-        switch (connectionStatus) {
-            case 'connecting':
-                return 'status-connecting';
-            case 'connected':
-                return 'status-connected';
-            case 'waiting':
-                return 'status-waiting';
-            default:
-                return '';
-        }
-    };
+    if (matchStatus === 'waiting') {
+        return (
+            <div className="waiting-container">
+                <h2>{userRole === 'customer' ? '상담원 연결 중...' : '고객 대기 중...'}</h2>
+            </div>
+        );
+    }
+
+    if (matchStatus === 'connecting') {
+        return <div>연결 중...</div>;
+    }
 
     return (
         <div className="chat-container">
             <div className="chat-wrapper">
-                <button className="back-btn" onClick={goBack}>
-                    ← 뒤로가기
+                <button className="back-btn" onClick={handleLeave}>
+                    상담 종료
                 </button>
 
                 <div className="chat-header">
                     <h2 className="chat-title">
-                        {userRole === 'customer' ? '👤 고객 채팅' : '🎧 상담원 채팅'}
+                        {userRole === 'customer' ? '고객 채팅' : '상담원 채팅'}
                     </h2>
-                    <div className={`connection-status ${getStatusClass()}`}>
-                        {getStatusText()}
+                    <div className="connection-status status-connected">
+                        연결됨 (세션: {sessionId})
                     </div>
                 </div>
 
-                <div className="chat-messages" id="chatMessages">
+                <div className="chat-messages">
                     {messages.map((message) => (
                         <div
                             key={message.id}
