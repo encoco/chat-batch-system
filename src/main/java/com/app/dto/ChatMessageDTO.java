@@ -4,6 +4,7 @@ import lombok.Data;
 
 @Data
 public class ChatMessageDTO {
+    int messageId;
     int chatId;
     int userId;
     String message;

@@ -43,6 +43,7 @@ public class CXController {
 
         message.setChatId(sessionId);
         message.setDate(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+
         matchService.addMessageToSession(sessionId, message);
         System.out.println("써비쓰" + chatService.saveChat(message));
         return message;

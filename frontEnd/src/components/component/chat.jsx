@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, {useState, useEffect, useRef, useMemo} from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import '../css/ChatPage.css';
 import webSocketService from "../../service/WebSocket.js";
@@ -7,7 +7,17 @@ const ChatPage = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const userRole = searchParams.get('role') || 'customer';
-    const userId = Math.floor(Math.random() * 10000) + 1;
+
+    const userId = useMemo(() => {
+        const storedUserId = sessionStorage.getItem('userId');
+        if (storedUserId) {
+            return parseInt(storedUserId);
+        }
+        const newUserId = Math.floor(Math.random() * 10000) + 1;
+        sessionStorage.setItem('userId', newUserId.toString());
+        console.log('새 userId 생성:', newUserId);
+        return newUserId;
+    }, []);
 
     const [matchStatus, setMatchStatus] = useState('connecting');
     const [sessionId, setSessionId] = useState(null);
@@ -58,31 +68,6 @@ const ChatPage = () => {
         scrollToBottom();
     }, [messages]);
 
-    useEffect(() => {
-        webSocketService.connect(userId, () => {
-            webSocketService.requestMatch(userId, userRole.toUpperCase());
-
-            webSocketService.subscribeToMatchResult(userId, (notification) => {
-                setSessionId(notification.sessionId);
-                setMatchStatus('matched');
-
-                webSocketService.subscribeToChatRoom(notification.sessionId, (message) => {
-                    setMessages(prev => [...prev, {
-                        id: message.chatId || Date.now(),
-                        text: message.message,
-                        sender: message.userId === userId ? 'user' : message.userId === 0 ? 'system' : 'other',
-                        timestamp: new Date(message.date)
-                    }]);
-                });
-            });
-
-            webSocketService.subscribeToWaiting(userId, () => {
-                setMatchStatus('waiting');
-            });
-        });
-    }, []);
-
-
     const handleKeyPress = (e) => {
         if (e.key === 'Enter') {
             sendMessage();
@@ -121,18 +106,6 @@ const ChatPage = () => {
         webSocketService.sendChatMessage(sessionId, message);
         setInputMessage('');
     };
-
-    if (matchStatus === 'waiting') {
-        return (
-            <div className="waiting-container">
-                <h2>{userRole === 'customer' ? '상담원 연결 중...' : '고객 대기 중...'}</h2>
-            </div>
-        );
-    }
-
-    if (matchStatus === 'connecting') {
-        return <div>연결 중...</div>;
-    }
 
     return (
         <div className="chat-container">

@@ -77,6 +77,7 @@ class WebSocketService {
             destination: `/api/pub/leave/${sessionId}`,
             body: JSON.stringify({ userId })
         });
+        console.log("해제 완료");
     }
 }
 
